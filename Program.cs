@@ -7,6 +7,7 @@ namespace s02170150
         static void Main(string[] args)
         {
             Console.WriteLine("Hello World!");
+            Console.WriteLine("New change");
         }
     }
 }
