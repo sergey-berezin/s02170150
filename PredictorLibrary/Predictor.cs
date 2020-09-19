@@ -6,6 +6,7 @@ using SixLabors.ImageSharp.Processing;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.ML.OnnxRuntime;
 using System.Collections.Generic;
+using System.IO;
 
 namespace PredictorLibrary
 {
@@ -15,10 +16,19 @@ namespace PredictorLibrary
         private string path_to_model;
 
         public Predictor(string path_to_imgs, 
-                         string path_to_model = "E:/s02170150/PredictorLibrary/resnet18-v1-7.onnx")
+                         string path_to_model = "E:\\s02170150\\PredictorLibrary\\resnet18-v1-7.onnx")
         {
             this.path_to_imgs = path_to_imgs;
             this.path_to_model = path_to_model;
+        }
+
+        public void process_directory()
+        {
+            string[] files = Directory.GetFiles(path_to_imgs, "*.jpeg");
+            foreach (string file in files)
+            {
+                process_image(file);
+            }
         }
 
         public void process_image(string path)
@@ -67,7 +77,7 @@ namespace PredictorLibrary
             foreach (var p in softmax
                 .Select((x, i) => new { Label = classLabels[i], Confidence = x })
                 .OrderByDescending(x => x.Confidence)
-                .Take(10))
+                .Take(1))
                 Console.WriteLine($"{p.Label} with confidence {p.Confidence}");
         }
 

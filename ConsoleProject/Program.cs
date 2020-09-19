@@ -10,7 +10,7 @@ namespace ConsoleProject
         {
             var a = new Predictor(args.FirstOrDefault() ?? "./images/");
             Console.WriteLine(a.ToString());
-            a.process_image("E:/s02170150/images/dog.jpeg");
+            a.process_directory();
         }
     }
 }
