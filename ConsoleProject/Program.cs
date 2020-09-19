@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Linq;
 using PredictorLibrary;
 
 namespace ConsoleProject
@@ -7,8 +8,9 @@ namespace ConsoleProject
     {
         static void Main(string[] args)
         {
-            var a = new Predictor();
-            Console.WriteLine("Hello World!");
+            var a = new Predictor(args.FirstOrDefault() ?? "./images/");
+            Console.WriteLine(a.ToString());
+            a.process_image("E:/s02170150/images/dog.jpeg");
         }
     }
 }
