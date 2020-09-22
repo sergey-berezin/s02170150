@@ -7,6 +7,8 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.ML.OnnxRuntime;
 using System.Collections.Generic;
 using System.IO;
+using Newtonsoft.Json;
+using System.Threading;
 
 namespace PredictorLibrary
 {
@@ -14,20 +16,80 @@ namespace PredictorLibrary
     {
         private string path_to_imgs;
         private string path_to_model;
+        private int proc_count;
+        private int counter;
 
         public Predictor(string path_to_imgs, 
                          string path_to_model = "E:\\s02170150\\PredictorLibrary\\resnet18-v1-7.onnx")
         {
             this.path_to_imgs = path_to_imgs;
             this.path_to_model = path_to_model;
+            proc_count = Environment.ProcessorCount;
+            counter = 0;
+        }
+
+        private void write(string result)
+        {
+            lock(this)
+            {
+                counter++;
+                Console.WriteLine(result);
+            }
         }
 
         public void process_directory()
         {
             string[] files = Directory.GetFiles(path_to_imgs, "*.jpeg");
-            foreach (string file in files)
+
+            int thread_count = proc_count < 2 ? 2 : proc_count;
+            thread_count = thread_count > files.Length ? files.Length : thread_count;
+            int end = files.Length % thread_count > 0 ? 1 : 0;
+            int step = files.Length / thread_count;
+            thread_count += (files.Length % thread_count) / step;
+
+            Thread[] threads = new Thread[thread_count + end];
+            for (int t = 0; t < thread_count + end; ++t)
             {
-                process_image(file);
+                if (t < thread_count)
+                {
+                    threads[t] = new Thread(startindex =>
+                    {
+                        int start = (int)startindex;
+                        for (int i = start; i < start + step; ++i)
+                        {
+                            process_image(files[i]);
+                        }
+                    });
+                    threads[t].Start(t * step);
+                }
+                else
+                {
+                    threads[t] = new Thread(startindex =>
+                    {
+                        int start = (int)startindex;
+                        for (int i = start; i < files.Length; ++i)
+                        {
+                            process_image(files[i]);
+                        }
+                    });
+                    threads[t].Start(t * step);
+                }
+            }
+
+            foreach (var th in threads)
+            {
+                th.Join();
+            }
+
+            Console.WriteLine($"Total outputs: {counter}");
+            counter = 0;
+        }
+
+        private void thread_method(string[] files, int startindex, int amount)
+        {
+            for (int i = startindex; i < startindex + amount; i++)
+            {
+                process_image(files[i]);
             }
         }
 
@@ -67,7 +129,6 @@ namespace PredictorLibrary
             };
 
             using var session = new InferenceSession(path_to_model);
-            Console.WriteLine("Predicting contents of image...");
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = session.Run(inputs);
 
             var output = results.First().AsEnumerable<float>().ToArray();
@@ -78,7 +139,7 @@ namespace PredictorLibrary
                 .Select((x, i) => new { Label = classLabels[i], Confidence = x })
                 .OrderByDescending(x => x.Confidence)
                 .Take(1))
-                Console.WriteLine($"{p.Label} with confidence {p.Confidence}");
+                write($"{p.Label} with confidence {p.Confidence} for file {path}");
         }
 
         public override string ToString()
