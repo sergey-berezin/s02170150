@@ -6,6 +6,7 @@ using SixLabors.ImageSharp.Processing;
 using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.ML.OnnxRuntime;
 using System.Collections.Generic;
+using System.Collections.Concurrent;
 using System.IO;
 using Newtonsoft.Json;
 using System.Threading;
@@ -18,6 +19,8 @@ namespace PredictorLibrary
         private string path_to_model;
         private int proc_count;
         private int counter;
+        private ConcurrentQueue<string> filenames;
+        private InferenceSession session;
 
         public Predictor(string path_to_imgs, 
                          string path_to_model = "E:\\s02170150\\PredictorLibrary\\resnet18-v1-7.onnx")
@@ -25,6 +28,7 @@ namespace PredictorLibrary
             this.path_to_imgs = path_to_imgs;
             this.path_to_model = path_to_model;
             proc_count = Environment.ProcessorCount;
+            session = new InferenceSession(path_to_model);
             counter = 0;
         }
 
@@ -39,41 +43,13 @@ namespace PredictorLibrary
 
         public void process_directory()
         {
-            string[] files = Directory.GetFiles(path_to_imgs, "*.jpeg");
+            filenames = new ConcurrentQueue<string>(Directory.GetFiles(path_to_imgs, "*.jpeg"));
 
-            int thread_count = proc_count < 2 ? 2 : proc_count;
-            thread_count = thread_count > files.Length ? files.Length : thread_count;
-            int end = files.Length % thread_count > 0 ? 1 : 0;
-            int step = files.Length / thread_count;
-            thread_count += (files.Length % thread_count) / step;
-
-            Thread[] threads = new Thread[thread_count + end];
-            for (int t = 0; t < thread_count + end; ++t)
+            Thread[] threads = new Thread[proc_count];
+            for (int i = 0; i < proc_count; ++i)
             {
-                if (t < thread_count)
-                {
-                    threads[t] = new Thread(startindex =>
-                    {
-                        int start = (int)startindex;
-                        for (int i = start; i < start + step; ++i)
-                        {
-                            process_image(files[i]);
-                        }
-                    });
-                    threads[t].Start(t * step);
-                }
-                else
-                {
-                    threads[t] = new Thread(startindex =>
-                    {
-                        int start = (int)startindex;
-                        for (int i = start; i < files.Length; ++i)
-                        {
-                            process_image(files[i]);
-                        }
-                    });
-                    threads[t].Start(t * step);
-                }
+                threads[i] = new Thread(thread_method);
+                threads[i].Start();
             }
 
             foreach (var th in threads)
@@ -85,11 +61,12 @@ namespace PredictorLibrary
             counter = 0;
         }
 
-        private void thread_method(string[] files, int startindex, int amount)
+        private void thread_method()
         {
-            for (int i = startindex; i < startindex + amount; i++)
+            string path;
+            while(filenames.TryDequeue(out path))
             {
-                process_image(files[i]);
+                process_image(path);
             }
         }
 
@@ -128,7 +105,6 @@ namespace PredictorLibrary
                 NamedOnnxValue.CreateFromTensor("data", input)
             };
 
-            using var session = new InferenceSession(path_to_model);
             using IDisposableReadOnlyCollection<DisposableNamedOnnxValue> results = session.Run(inputs);
 
             var output = results.First().AsEnumerable<float>().ToArray();
