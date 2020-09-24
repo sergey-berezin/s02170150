@@ -23,7 +23,7 @@ namespace PredictorLibrary
         private InferenceSession session;
 
         public Predictor(string path_to_imgs, 
-                         string path_to_model = "E:\\s02170150\\PredictorLibrary\\resnet18-v1-7.onnx")
+                         string path_to_model = "..\\..\\..\\..\\PredictorLibrary\\resnet18-v1-7.onnx")
         {
             this.path_to_imgs = path_to_imgs;
             this.path_to_model = path_to_model;
@@ -120,7 +120,7 @@ namespace PredictorLibrary
 
         public override string ToString()
         {
-            return "Images: " + path_to_imgs + "; Model: " + path_to_model;
+            return $"Images: {path_to_imgs}; Model: {path_to_model}; Processors: {proc_count}.";
         }
 
         static readonly string[] classLabels = new[]
