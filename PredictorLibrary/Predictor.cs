@@ -21,6 +21,8 @@ namespace PredictorLibrary
         private int counter;
         private ConcurrentQueue<string> filenames;
         private InferenceSession session;
+        private AutoResetEvent out_mutex;
+        private ManualResetEvent cancel;
 
         public Predictor(string path_to_imgs, 
                          string path_to_model = "..\\..\\..\\..\\PredictorLibrary\\resnet18-v1-7.onnx")
@@ -29,16 +31,19 @@ namespace PredictorLibrary
             this.path_to_model = path_to_model;
             proc_count = Environment.ProcessorCount;
             session = new InferenceSession(path_to_model);
+            out_mutex = new AutoResetEvent(true);
+            cancel = new ManualResetEvent(false);
+            Console.CancelKeyPress += (sender, eArgs) => {
+                cancel.Set();
+                eArgs.Cancel = true;
+            };
             counter = 0;
         }
 
         private void write(string result)
         {
-            lock(this)
-            {
-                counter++;
-                Console.WriteLine(result);
-            }
+            counter++;
+            Console.WriteLine(result);
         }
 
         public void process_directory()
@@ -66,6 +71,11 @@ namespace PredictorLibrary
             string path;
             while(filenames.TryDequeue(out path))
             {
+                if (cancel.WaitOne(0))
+                {
+                    Console.WriteLine("Interrupted");
+                    return;
+                }
                 process_image(path);
             }
         }
@@ -115,7 +125,11 @@ namespace PredictorLibrary
                 .Select((x, i) => new { Label = classLabels[i], Confidence = x })
                 .OrderByDescending(x => x.Confidence)
                 .Take(1))
+            {
+                out_mutex.WaitOne(0);
                 write($"{p.Label} with confidence {p.Confidence} for file {path}");
+                out_mutex.Set();
+            }
         }
 
         public override string ToString()
