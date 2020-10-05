@@ -19,36 +19,33 @@ namespace PredictorLibrary
         private string path_to_model;
         private int proc_count;
         private int counter;
+        private int counter_max;
         private ConcurrentQueue<string> filenames;
         private InferenceSession session;
         private AutoResetEvent out_mutex;
         private ManualResetEvent cancel;
 
-        public Predictor(string path_to_imgs, 
+        public delegate void Output(string msg);
+        Output write;
+
+        public Predictor(string path_to_imgs,
+                         Output write,
                          string path_to_model = "..\\..\\..\\..\\PredictorLibrary\\resnet18-v1-7.onnx")
         {
             this.path_to_imgs = path_to_imgs;
+            this.write += write;
             this.path_to_model = path_to_model;
             proc_count = Environment.ProcessorCount;
             session = new InferenceSession(path_to_model);
             out_mutex = new AutoResetEvent(true);
             cancel = new ManualResetEvent(false);
-            Console.CancelKeyPress += (sender, eArgs) => {
-                cancel.Set();
-                eArgs.Cancel = true;
-            };
+        }
+
+        public void ProcessDirectory()
+        {
             counter = 0;
-        }
-
-        private void write(string result)
-        {
-            counter++;
-            Console.WriteLine(result);
-        }
-
-        public void process_directory()
-        {
             filenames = new ConcurrentQueue<string>(Directory.GetFiles(path_to_imgs, "*.jpeg"));
+            counter_max = filenames.Count;
 
             Thread[] threads = new Thread[proc_count];
             for (int i = 0; i < proc_count; ++i)
@@ -56,15 +53,9 @@ namespace PredictorLibrary
                 threads[i] = new Thread(thread_method);
                 threads[i].Start();
             }
-
-            foreach (var th in threads)
-            {
-                th.Join();
-            }
-
-            Console.WriteLine($"Total outputs: {counter}");
-            counter = 0;
         }
+
+        public void Stop() => cancel.Set();
 
         private void thread_method()
         {
@@ -73,14 +64,23 @@ namespace PredictorLibrary
             {
                 if (cancel.WaitOne(0))
                 {
-                    Console.WriteLine("Interrupted");
+                    write("Interrupted");
                     return;
                 }
                 process_image(path);
             }
         }
 
-        public void process_image(string path)
+        private void post_process()
+        {
+            counter += 1;
+            if (counter == counter_max)
+            {
+                write($"Total outputs: {counter}");
+            }
+        }
+
+        private void process_image(string path)
         {
             using var image = Image.Load<Rgb24>(path);
 
@@ -128,6 +128,7 @@ namespace PredictorLibrary
             {
                 out_mutex.WaitOne(0);
                 write($"{p.Label} with confidence {p.Confidence} for file {path}");
+                post_process();
                 out_mutex.Set();
             }
         }
