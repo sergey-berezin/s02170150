@@ -53,20 +53,13 @@ namespace PredictorLibrary
 
         public Predictor(string path_to_imgs,
                          Output write,
-                         string path_to_model = "E:\\s02170150\\PredictorLibrary\\resnet18-v1-7.onnx")
+                         string path_to_model = "..\\..\\..\\PredictorLibrary\\resnet18-v1-7.onnx")
         {
             this.path_to_imgs = path_to_imgs;
             this.write += write;
             this.path_to_model = path_to_model;
             proc_count = Environment.ProcessorCount;
-            try
-            {
-                session = new InferenceSession(path_to_model);
-            }
-            catch(Exception e)
-            {
-                Console.WriteLine($"Error here: {e.Message}");
-            }
+            session = new InferenceSession(path_to_model);
             out_mutex = new AutoResetEvent(true);
             cancel = new ManualResetEvent(false);
         }
