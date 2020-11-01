@@ -13,6 +13,29 @@ using System.Threading;
 
 namespace PredictorLibrary
 {
+    public class Result
+    {
+        public string Class { get; set; }
+        public float Confidence { get; set; }
+        public string Path { get; set; }
+
+        public Result(string cl, float conf = 0.0f, string path = null)
+        {
+            Class = cl;
+            Confidence = conf;
+            Path = path;
+        }
+
+        public override string ToString()
+        {
+            if (Path == null)
+            {
+                return Class;
+            }
+            return $"{Class} with confidence {Confidence} for image {Path}";
+        }
+    }
+
     public class Predictor
     {
         private string path_to_imgs;
@@ -25,12 +48,12 @@ namespace PredictorLibrary
         private AutoResetEvent out_mutex;
         private ManualResetEvent cancel;
 
-        public delegate void Output(string msg);
+        public delegate void Output(Result result);
         Output write;
 
         public Predictor(string path_to_imgs,
                          Output write,
-                         string path_to_model = "..\\..\\..\\..\\PredictorLibrary\\resnet18-v1-7.onnx")
+                         string path_to_model = "..\\..\\..\\PredictorLibrary\\resnet18-v1-7.onnx")
         {
             this.path_to_imgs = path_to_imgs;
             this.write += write;
@@ -41,11 +64,25 @@ namespace PredictorLibrary
             cancel = new ManualResetEvent(false);
         }
 
+        public string ImagePath
+        {
+            get
+            {
+                return path_to_imgs;
+            }
+            set
+            {
+                path_to_imgs = value;
+            }
+        }
+
         public void ProcessDirectory()
         {
             counter = 0;
             filenames = new ConcurrentQueue<string>(Directory.GetFiles(path_to_imgs, "*.jpeg"));
             counter_max = filenames.Count;
+            out_mutex = new AutoResetEvent(true);
+            cancel = new ManualResetEvent(false);
 
             Thread[] threads = new Thread[proc_count];
             for (int i = 0; i < proc_count; ++i)
@@ -64,7 +101,7 @@ namespace PredictorLibrary
             {
                 if (cancel.WaitOne(0))
                 {
-                    write("Interrupted");
+                    write(new Result("Interrupted"));
                     return;
                 }
                 process_image(path);
@@ -74,10 +111,6 @@ namespace PredictorLibrary
         private void post_process()
         {
             counter += 1;
-            if (counter == counter_max)
-            {
-                write($"Total outputs: {counter}");
-            }
         }
 
         private void process_image(string path)
@@ -127,7 +160,7 @@ namespace PredictorLibrary
                 .Take(1))
             {
                 out_mutex.WaitOne(0);
-                write($"{p.Label} with confidence {p.Confidence} for file {path}");
+                write(new Result(p.Label, p.Confidence, path));
                 post_process();
                 out_mutex.Set();
             }

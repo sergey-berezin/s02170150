@@ -6,7 +6,7 @@ namespace ConsoleProject
 {
     class Program
     {
-        public static void Output(string result)
+        public static void Output(Result result)
         {
             Console.WriteLine(result);
         }
