@@ -42,7 +42,7 @@ namespace UI
         public DbSet<SavedResult> SavedResults { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-            optionsBuilder.UseSqlite("Data Source=results.db");
+            optionsBuilder.UseSqlite("Data Source=../../../results.db");
     }
 
     public partial class MainWindow : Window
