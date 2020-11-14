@@ -124,6 +124,7 @@ namespace UI
             {
                 using (var dialog = new System.Windows.Forms.FolderBrowserDialog())
                 {
+                    dialog.SelectedPath = "E:\\s02170150\\images";
                     System.Windows.Forms.DialogResult result = dialog.ShowDialog();
                     if (result != System.Windows.Forms.DialogResult.OK) return;
                     pred?.Stop();
@@ -135,6 +136,8 @@ namespace UI
                     results.Clear();
                     images.Clear();
                     class_nums.Clear();
+                    
+                    // Test change
 
                     for (int i = 0; i < Environment.ProcessorCount; ++i)
                     {
@@ -235,6 +238,10 @@ namespace UI
         public Image(string path)
         {
             Path = path;
+            if (path == null)
+            {
+                Console.WriteLine("Error here");
+            }
             Bitmap = new BitmapImage(new Uri(path));
             Class = "";
         }
