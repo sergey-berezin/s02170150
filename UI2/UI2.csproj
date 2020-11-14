@@ -2,23 +2,19 @@
 
     <PropertyGroup>
         <OutputType>WinExe</OutputType>
-        <TargetFramework>netcoreapp3.1-windows</TargetFramework>
         <UseWPF>true</UseWPF>
       <UseWindowsForms>true</UseWindowsForms>
+      <LangVersion>8</LangVersion>
+      <TargetFramework>netcoreapp3.1</TargetFramework>
     </PropertyGroup>
 
     <ItemGroup>
-      <COMReference Include="{215d64d2-031c-33c7-96e3-61794cd1ee61}">
-        <WrapperTool>tlbimp</WrapperTool>
-        <VersionMinor>4</VersionMinor>
-        <VersionMajor>2</VersionMajor>
-        <Guid>215d64d2-031c-33c7-96e3-61794cd1ee61</Guid>
-      </COMReference>
-    </ItemGroup>
-
-    <ItemGroup>
-      <PackageReference Include="Microsoft.EntityFrameworkCore" Version="5.0.0" />
-      <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="5.0.0" />
+      <PackageReference Include="Microsoft.EntityFrameworkCore" Version="3.1.10" />
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="3.1.10">
+        <PrivateAssets>all</PrivateAssets>
+        <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+      </PackageReference>
+      <PackageReference Include="Microsoft.EntityFrameworkCore.Sqlite" Version="3.1.10" />
     </ItemGroup>
 
     <ItemGroup>
