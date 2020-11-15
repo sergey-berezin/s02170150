@@ -12,33 +12,36 @@ using System.IO;
 using Newtonsoft.Json;
 using System.Threading;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.ML.Transforms.Text;
+using System.Runtime.InteropServices;
+using SixLabors.ImageSharp.Advanced;
 
 namespace PredictorLibrary
 {
     class ResultContext : DbContext
     {
         public DbSet<Result> SavedResults { get; set; }
+        public DbSet<ImageData> Images { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
             optionsBuilder.UseSqlite("Data Source=../../../../UI2/results.db");
     }
 
+    public class ImageData
+    {
+        [Key]
+        public int ImageDataId { get; set; }
+        public byte[] Data { get; set; }
+    }
+    
     public class Result
     {
         [Key]
-        public int ResultId { get; set; }
+        public int ItemId { get; set; }
         public string Class { get; set; }
         public float Confidence { get; set; }
         public string Path { get; set; }
-
-        public Result() { }
-
-        public Result(string cl, float conf = 0.0f, string path = null)
-        {
-            Class = cl;
-            Confidence = conf;
-            Path = path;
-        }
+        public virtual ImageData Blob { get; set; }
 
         public override string ToString()
         {
@@ -106,33 +109,80 @@ namespace PredictorLibrary
             }
         }
 
+        public void ClearDatabase()
+        {
+            this.Stop();
+            Console.WriteLine("Clearing database");
+            using (var db = new ResultContext())
+            {
+                foreach (var result in db.SavedResults)
+                {
+                    db.Remove(result);
+                }
+
+                db.SaveChanges();
+            }
+        }
+
         public void Stop() => cancel.Set();
 
         private void thread_method()
         {
             string path;
-            while(filenames.TryDequeue(out path))
+            while (filenames.TryDequeue(out path))
             {
                 if (cancel.WaitOne(0))
                 {
-                    write(new Result("Interrupted"));
+                    write(new Result{ Class = "Interrupted", Blob = null, Confidence = 0.0f, Path = ""});
                     return;
                 }
-                using (var db = new ResultContext())
+
+                using var image = Image.Load<Rgb24>(path);
+                var _IMemoryGroup = image.GetPixelMemoryGroup();
+                var _MemoryGroup = _IMemoryGroup.ToArray()[0];
+                byte[] blob = MemoryMarshal.AsBytes(_MemoryGroup.Span).ToArray();
+                Result info;
+
+                if (check_if_in_db(blob, path, out info))
                 {
-                    foreach (var result in db.SavedResults)
+                    Console.WriteLine("Found identical: " + info);
+                    write(info);
+                    return;
+                }
+
+                Console.WriteLine("No identical found, processing");
+                process_image(image, path, blob);
+            }
+        }
+
+        private bool check_if_in_db(byte[] blob, string path, out Result info)
+        {
+            info = null;
+            using (var db = new ResultContext())
+            {
+                var query = db.SavedResults.Where(a => a.Path == path).Include(a => a.Blob);
+                if (query.Count() == 0)
+                {
+                    return false;
+                }
+                foreach (var result in query)
+                {
+                    info = new Result{ Class = result.Class, Confidence = result.Confidence, Path = result.Path, Blob = new ImageData { Data = blob}};
+                    if (result.Blob.Data.Length != blob.Length)
                     {
-                        if (result.Path == path)
+                        return false;
+                    }
+                    for (int i = 0; i < blob.Length; ++i)
+                    {
+                        if (blob[i] != result.Blob.Data[i])
                         {
-                            Console.WriteLine("Found identical:" + result.ToString());
-                            write(new Result($"{result.Class} (db Id: {result.ResultId})", result.Confidence, result.Path));
-                            return;
+                            return false;
                         }
                     }
                 }
-                Console.WriteLine("No identical found, processing");
-                process_image(path);
             }
+
+            return true;
         }
 
         private void post_process(Result result)
@@ -146,9 +196,8 @@ namespace PredictorLibrary
             }
         }
 
-        private void process_image(string path)
+        private void process_image(Image<Rgb24> image, string path, byte[] blob)
         {
-            using var image = Image.Load<Rgb24>(path);
 
             const int targetHeight = 224;
             const int targetWidth = 224;
@@ -193,7 +242,7 @@ namespace PredictorLibrary
                 .Take(1))
             {
                 out_mutex.WaitOne(0);
-                var result = new Result(p.Label, p.Confidence, path);
+                var result = new Result { Class = p.Label, Confidence = p.Confidence, Path = path, Blob = new ImageData { Data = blob } };
                 write(result);
                 post_process(result);
                 out_mutex.Set();

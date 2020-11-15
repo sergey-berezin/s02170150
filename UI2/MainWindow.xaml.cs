@@ -165,10 +165,7 @@ namespace UI
 
         private void Stop(object sender, RoutedEventArgs e)
         {
-            if (pred != null)
-            {
-                pred.Stop();
-            }
+            pred?.Stop();
         }
 
         private void list_box_classes_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -183,6 +180,11 @@ namespace UI
                     filtered_imgs.Add(t);
                 }
             }
+        }
+
+        private void Clear_DB(object sender, RoutedEventArgs e)
+        {
+            pred?.ClearDatabase();
         }
     }
 
