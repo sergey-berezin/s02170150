@@ -24,7 +24,9 @@ namespace PredictorLibrary
         public DbSet<ImageData> Images { get; set; }
 
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-            optionsBuilder.UseSqlite("Data Source=../../../../UI2/results.db");
+            optionsBuilder
+                .UseLazyLoadingProxies()
+                .UseSqlite("Data Source=../../../../UI2/results.db");
     }
 
     public class ImageData
@@ -158,30 +160,27 @@ namespace PredictorLibrary
         private bool check_if_in_db(byte[] blob, string path, out Result info)
         {
             info = null;
-            using (var db = new ResultContext())
+            using var db = new ResultContext();
+            var query = db.SavedResults.Where(a => a.Path == path);
+            if (query.Count() == 0)
             {
-                var query = db.SavedResults.Where(a => a.Path == path).Include(a => a.Blob);
-                if (query.Count() == 0)
+                return false;
+            }
+            foreach (var result in query)
+            {
+                info = new Result{ Class = result.Class, Confidence = result.Confidence, Path = result.Path, Blob = new ImageData { Data = blob}};
+                if (result.Blob.Data.Length != blob.Length)
                 {
                     return false;
                 }
-                foreach (var result in query)
+                for (int i = 0; i < blob.Length; ++i)
                 {
-                    info = new Result{ Class = result.Class, Confidence = result.Confidence, Path = result.Path, Blob = new ImageData { Data = blob}};
-                    if (result.Blob.Data.Length != blob.Length)
+                    if (blob[i] != result.Blob.Data[i])
                     {
                         return false;
                     }
-                    for (int i = 0; i < blob.Length; ++i)
-                    {
-                        if (blob[i] != result.Blob.Data[i])
-                        {
-                            return false;
-                        }
-                    }
                 }
             }
-
             return true;
         }
 
