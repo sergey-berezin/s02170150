@@ -72,7 +72,7 @@ namespace PredictorLibrary
 
         public Predictor(string path_to_imgs,
                          Output write,
-                         string path_to_model = "..\\..\\..\\PredictorLibrary\\resnet18-v1-7.onnx")
+                         string path_to_model = "..\\..\\..\\..\\PredictorLibrary\\resnet18-v1-7.onnx")
         {
             this.path_to_imgs = path_to_imgs;
             this.write += write;
