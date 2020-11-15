@@ -1,8 +1,8 @@
 ﻿using Microsoft.EntityFrameworkCore.Migrations;
 
-namespace UI2.Migrations
+namespace PredictorLibrary.Migrations
 {
-    public partial class FirstVersion : Migration
+    public partial class First : Migration
     {
         protected override void Up(MigrationBuilder migrationBuilder)
         {
@@ -10,10 +10,11 @@ namespace UI2.Migrations
                 name: "SavedResults",
                 columns: table => new
                 {
-                    ResultId = table.Column<int>(nullable: false)
+                    ResultId = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
-                    Path = table.Column<string>(nullable: true),
-                    Class = table.Column<string>(nullable: true)
+                    Class = table.Column<string>(type: "TEXT", nullable: true),
+                    Confidence = table.Column<float>(type: "REAL", nullable: false),
+                    Path = table.Column<string>(type: "TEXT", nullable: true)
                 },
                 constraints: table =>
                 {

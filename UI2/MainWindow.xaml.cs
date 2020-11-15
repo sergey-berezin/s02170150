@@ -28,23 +28,6 @@ namespace UI
     /// <summary>
     /// Логика взаимодействия для MainWindow.xaml
     /// </summary>
-
-    class SavedResult
-    {
-        [Key]
-        public int ResultId { get; set; }
-        public string Path { get; set; }
-        public string Class { get; set; }
-    }
-
-    class ResultContext : DbContext
-    {
-        public DbSet<SavedResult> SavedResults { get; set; }
-
-        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
-            optionsBuilder.UseSqlite("Data Source=../../../results.db");
-    }
-
     public partial class MainWindow : Window
     {
         private Predictor pred = null;
@@ -81,12 +64,6 @@ namespace UI
                         images[i].Class = result.Class;
                         break;
                     }
-                }
-
-                using (var db = new ResultContext())
-                {
-                    db.Add(new SavedResult { Class = result.Class + " (db)" , Path = result.Path });
-                    db.SaveChanges();
                 }
             }));
         }

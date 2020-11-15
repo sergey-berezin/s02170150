@@ -7,17 +7,31 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.ML.OnnxRuntime;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
+using System.ComponentModel.DataAnnotations;
 using System.IO;
 using Newtonsoft.Json;
 using System.Threading;
+using Microsoft.EntityFrameworkCore;
 
 namespace PredictorLibrary
 {
+    class ResultContext : DbContext
+    {
+        public DbSet<Result> SavedResults { get; set; }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+            optionsBuilder.UseSqlite("Data Source=../../../../UI2/results.db");
+    }
+
     public class Result
     {
+        [Key]
+        public int ResultId { get; set; }
         public string Class { get; set; }
         public float Confidence { get; set; }
         public string Path { get; set; }
+
+        public Result() { }
 
         public Result(string cl, float conf = 0.0f, string path = null)
         {
@@ -104,13 +118,32 @@ namespace PredictorLibrary
                     write(new Result("Interrupted"));
                     return;
                 }
+                using (var db = new ResultContext())
+                {
+                    foreach (var result in db.SavedResults)
+                    {
+                        if (result.Path == path)
+                        {
+                            Console.WriteLine("Found identical:" + result.ToString());
+                            write(new Result($"{result.Class} (db Id: {result.ResultId})", result.Confidence, result.Path));
+                            return;
+                        }
+                    }
+                }
+                Console.WriteLine("No identical found, processing");
                 process_image(path);
             }
         }
 
-        private void post_process()
+        private void post_process(Result result)
         {
             counter += 1;
+            using (var db = new ResultContext())
+            {
+                Console.WriteLine("Added new entity");
+                db.Add(result);
+                db.SaveChanges();
+            }
         }
 
         private void process_image(string path)
@@ -160,8 +193,9 @@ namespace PredictorLibrary
                 .Take(1))
             {
                 out_mutex.WaitOne(0);
-                write(new Result(p.Label, p.Confidence, path));
-                post_process();
+                var result = new Result(p.Label, p.Confidence, path);
+                write(result);
+                post_process(result);
                 out_mutex.Set();
             }
         }
