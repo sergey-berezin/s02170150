@@ -45,6 +45,7 @@
             </ListBox.ItemTemplate>
         </ListBox>
         <Button Content="Clear Database" HorizontalAlignment="Left" Margin="197,10,0,0" VerticalAlignment="Top" Width="102" Click="Clear_DB"/>
+        <Button Content="Show stats" HorizontalAlignment="Left" Margin="304,10,0,0" VerticalAlignment="Top" Width="80" Click="Stats"/>
 
     </Grid>
 </Window>

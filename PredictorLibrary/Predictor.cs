@@ -126,6 +126,22 @@ namespace PredictorLibrary
             }
         }
 
+        public string DatabaseStats()
+        {
+            string ret = "";
+            using var db = new ResultContext();
+            foreach (var classLabel in classLabels)
+            {
+                int count = db.SavedResults.Count(a => a.Class == classLabel);
+                if (count > 0)
+                {
+                    ret += $"{classLabel}: {count}\r\n";
+                }
+            }
+
+            return ret;
+        }
+
         public void Stop() => cancel.Set();
 
         private void thread_method()

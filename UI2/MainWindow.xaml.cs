@@ -186,6 +186,11 @@ namespace UI
         {
             pred?.ClearDatabase();
         }
+
+        private void Stats(object sender, RoutedEventArgs e)
+        {
+            MessageBox.Show(pred?.DatabaseStats());
+        }
     }
 
     public class ClassName : INotifyPropertyChanged
