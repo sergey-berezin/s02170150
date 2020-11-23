@@ -19,6 +19,7 @@ using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
+using Microsoft.EntityFrameworkCore;
 using PredictorLibrary;
 
 namespace UI
@@ -26,6 +27,7 @@ namespace UI
     /// <summary>
     /// Логика взаимодействия для MainWindow.xaml
     /// </summary>
+
     public partial class MainWindow : Window
     {
         private Predictor pred = null;

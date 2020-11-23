@@ -7,24 +7,43 @@ using Microsoft.ML.OnnxRuntime.Tensors;
 using Microsoft.ML.OnnxRuntime;
 using System.Collections.Generic;
 using System.Collections.Concurrent;
+using System.ComponentModel.DataAnnotations;
 using System.IO;
 using Newtonsoft.Json;
 using System.Threading;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.ML.Transforms.Text;
+using System.Runtime.InteropServices;
+using SixLabors.ImageSharp.Advanced;
 
 namespace PredictorLibrary
 {
+    class ResultContext : DbContext
+    {
+        public DbSet<Result> SavedResults { get; set; }
+        public DbSet<ImageData> Images { get; set; }
+
+        protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
+            optionsBuilder
+                .UseLazyLoadingProxies()
+                .UseSqlite("Data Source=../../../../UI2/results.db");
+    }
+
+    public class ImageData
+    {
+        [Key]
+        public int ImageDataId { get; set; }
+        public byte[] Data { get; set; }
+    }
+    
     public class Result
     {
+        [Key]
+        public int ItemId { get; set; }
         public string Class { get; set; }
         public float Confidence { get; set; }
         public string Path { get; set; }
-
-        public Result(string cl, float conf = 0.0f, string path = null)
-        {
-            Class = cl;
-            Confidence = conf;
-            Path = path;
-        }
+        public virtual ImageData Blob { get; set; }
 
         public override string ToString()
         {
@@ -53,7 +72,7 @@ namespace PredictorLibrary
 
         public Predictor(string path_to_imgs,
                          Output write,
-                         string path_to_model = "..\\..\\..\\PredictorLibrary\\resnet18-v1-7.onnx")
+                         string path_to_model = "..\\..\\..\\..\\PredictorLibrary\\resnet18-v1-7.onnx")
         {
             this.path_to_imgs = path_to_imgs;
             this.write += write;
@@ -92,30 +111,108 @@ namespace PredictorLibrary
             }
         }
 
+        public void ClearDatabase()
+        {
+            this.Stop();
+            Console.WriteLine("Clearing database");
+            using (var db = new ResultContext())
+            {
+                foreach (var result in db.SavedResults)
+                {
+                    db.Remove(result);
+                }
+
+                db.SaveChanges();
+            }
+        }
+
+        public string DatabaseStats()
+        {
+            string ret = "";
+            using var db = new ResultContext();
+            foreach (var classLabel in classLabels)
+            {
+                int count = db.SavedResults.Count(a => a.Class == classLabel);
+                if (count > 0)
+                {
+                    ret += $"{classLabel}: {count}\r\n";
+                }
+            }
+
+            return ret;
+        }
+
         public void Stop() => cancel.Set();
 
         private void thread_method()
         {
             string path;
-            while(filenames.TryDequeue(out path))
+            while (filenames.TryDequeue(out path))
             {
                 if (cancel.WaitOne(0))
                 {
-                    write(new Result("Interrupted"));
+                    write(new Result{ Class = "Interrupted", Blob = null, Confidence = 0.0f, Path = ""});
                     return;
                 }
-                process_image(path);
+
+                using var image = Image.Load<Rgb24>(path);
+                var _IMemoryGroup = image.GetPixelMemoryGroup();
+                var _MemoryGroup = _IMemoryGroup.ToArray()[0];
+                byte[] blob = MemoryMarshal.AsBytes(_MemoryGroup.Span).ToArray();
+                Result info;
+
+                if (check_if_in_db(blob, path, out info))
+                {
+                    Console.WriteLine("Found identical: " + info);
+                    write(info);
+                    return;
+                }
+
+                Console.WriteLine("No identical found, processing");
+                process_image(image, path, blob);
             }
         }
 
-        private void post_process()
+        private bool check_if_in_db(byte[] blob, string path, out Result info)
         {
-            counter += 1;
+            info = null;
+            using var db = new ResultContext();
+            var query = db.SavedResults.Where(a => a.Path == path);
+            if (query.Count() == 0)
+            {
+                return false;
+            }
+            foreach (var result in query)
+            {
+                info = new Result{ Class = result.Class, Confidence = result.Confidence, Path = result.Path, Blob = new ImageData { Data = blob}};
+                if (result.Blob.Data.Length != blob.Length)
+                {
+                    return false;
+                }
+                for (int i = 0; i < blob.Length; ++i)
+                {
+                    if (blob[i] != result.Blob.Data[i])
+                    {
+                        return false;
+                    }
+                }
+            }
+            return true;
         }
 
-        private void process_image(string path)
+        private void post_process(Result result)
         {
-            using var image = Image.Load<Rgb24>(path);
+            counter += 1;
+            using (var db = new ResultContext())
+            {
+                Console.WriteLine("Added new entity");
+                db.Add(result);
+                db.SaveChanges();
+            }
+        }
+
+        private void process_image(Image<Rgb24> image, string path, byte[] blob)
+        {
 
             const int targetHeight = 224;
             const int targetWidth = 224;
@@ -160,8 +257,9 @@ namespace PredictorLibrary
                 .Take(1))
             {
                 out_mutex.WaitOne(0);
-                write(new Result(p.Label, p.Confidence, path));
-                post_process();
+                var result = new Result { Class = p.Label, Confidence = p.Confidence, Path = path, Blob = new ImageData { Data = blob } };
+                write(result);
+                post_process(result);
                 out_mutex.Set();
             }
         }
