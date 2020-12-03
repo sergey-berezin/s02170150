@@ -173,13 +173,15 @@ namespace PredictorLibrary
         public static string DatabaseStats()
         {
             string ret = "";
-            using var db = new ResultContext();
-            foreach (var classLabel in classLabels)
+            using (var db = new ResultContext())
             {
-                int count = db.SavedResults.Count(a => a.Class == classLabel);
-                if (count > 0)
+                foreach (var classLabel in classLabels)
                 {
-                    ret += $"{classLabel}: {count}\r\n";
+                    int count = db.SavedResults.Count(a => a.Class == classLabel);
+                    if (count > 0)
+                    {
+                        ret += $"{classLabel}: {count}\r\n";
+                    }
                 }
             }
 

@@ -118,9 +118,9 @@ namespace UI
             HttpResponseMessage response;
             try
             {
-                response = _httpClient.GetAsync(url + "/results").Result;
+                response = await _httpClient.GetAsync(url + "/results");
             }
-            catch (Exception e)
+            catch (HttpRequestException)
             {
                 await Dispatcher.BeginInvoke(new Action(() =>
                 {
@@ -249,7 +249,7 @@ namespace UI
             {
                 response = _httpClient.DeleteAsync(url).Result;
             }
-            catch (Exception ex)
+            catch (HttpRequestException)
             {
                 await Dispatcher.BeginInvoke(new Action(() =>
                 {
@@ -259,9 +259,31 @@ namespace UI
             }
         }
 
-        private void Stats(object sender, RoutedEventArgs e)
+        private async void Stats(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show(Predictor.DatabaseStats());
+            HttpResponseMessage response;
+            try
+            {
+                response = await _httpClient.GetAsync(url + "/dbstats");
+            }
+            catch (HttpRequestException)
+            {
+                await Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    MessageBox.Show("Connection failed.", "ERROR");
+                }));
+                return;
+            }
+            
+            if (response.IsSuccessStatusCode)
+            {
+                string stats = response.Content.ReadAsStringAsync().Result;
+                
+                await Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    MessageBox.Show(stats, "Stats");
+                }));
+            }
         }
     }
 
