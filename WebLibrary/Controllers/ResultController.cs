@@ -36,6 +36,7 @@ namespace WebLibrary.Controllers
         [HttpGet("dbstats")]
         public string DBStats()
         {
+            _predictor?.Stop();
             return Predictor.DatabaseStats();
         }
 
