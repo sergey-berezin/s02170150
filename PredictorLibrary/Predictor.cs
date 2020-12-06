@@ -27,7 +27,7 @@ namespace PredictorLibrary
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
             optionsBuilder
                 .UseLazyLoadingProxies()
-                .UseSqlite("Data Source=results.db");
+                .UseSqlite("Data Source=E:/s02170150/WebLibrary/results.db");
     }
 
     public class ImageData

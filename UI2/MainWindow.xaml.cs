@@ -225,7 +225,9 @@ namespace UI
 
         private void Stop(object sender, RoutedEventArgs e)
         {
-            //pred?.Stop();
+            cts.Cancel(false);
+            cts.Dispose();
+            cts = new CancellationTokenSource();
         }
 
         private void list_box_classes_SelectionChanged(object sender, SelectionChangedEventArgs e)
