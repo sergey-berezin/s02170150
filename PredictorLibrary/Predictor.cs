@@ -15,6 +15,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.ML.Transforms.Text;
 using System.Runtime.InteropServices;
 using SixLabors.ImageSharp.Advanced;
+using SixLabors.ImageSharp.Formats;
 
 namespace PredictorLibrary
 {
@@ -26,7 +27,7 @@ namespace PredictorLibrary
         protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder) =>
             optionsBuilder
                 .UseLazyLoadingProxies()
-                .UseSqlite("Data Source=../../../../UI2/results.db");
+                .UseSqlite("Data Source=E:/s02170150/WebLibrary/results.db");
     }
 
     public class ImageData
@@ -72,7 +73,7 @@ namespace PredictorLibrary
 
         public Predictor(string path_to_imgs,
                          Output write,
-                         string path_to_model = "..\\..\\..\\..\\PredictorLibrary\\resnet18-v1-7.onnx")
+                         string path_to_model = "E:\\s02170150\\PredictorLibrary\\resnet18-v1-7.onnx") //"..\\..\\..\\..\\PredictorLibrary\\resnet18-v1-7.onnx"
         {
             this.path_to_imgs = path_to_imgs;
             this.write += write;
@@ -98,7 +99,11 @@ namespace PredictorLibrary
         public void ProcessDirectory()
         {
             counter = 0;
-            filenames = new ConcurrentQueue<string>(Directory.GetFiles(path_to_imgs, "*.jpeg"));
+            filenames ??= new ConcurrentQueue<string>();
+            foreach (var path in  Directory.GetFiles(path_to_imgs, "*.jpeg"))
+            {
+                filenames.Enqueue(path);
+            }
             counter_max = filenames.Count;
             out_mutex = new AutoResetEvent(true);
             cancel = new ManualResetEvent(false);
@@ -109,11 +114,15 @@ namespace PredictorLibrary
                 threads[i] = new Thread(thread_method);
                 threads[i].Start();
             }
+
+            foreach (var thread in threads)
+            {
+                thread.Join();
+            }
         }
 
-        public void ClearDatabase()
+        public static void ClearDatabase()
         {
-            this.Stop();
             Console.WriteLine("Clearing database");
             using (var db = new ResultContext())
             {
@@ -126,16 +135,53 @@ namespace PredictorLibrary
             }
         }
 
-        public string DatabaseStats()
+        public static List<Result> GetDatabaseDir(string dir)
+        {
+            List<Result> ret = new List<Result>();
+            using (var db = new ResultContext())
+            {
+                foreach (var path in Directory.GetFiles(dir, "*.jpeg"))
+                {
+                    Result saved = (from item in db.SavedResults.Include(a => a.Blob)
+                        where item.Path == path
+                        select item).First();
+                    ret.Add(saved);
+                }
+            }
+            Console.WriteLine("Returning from predictor");
+            return ret;
+        }
+        
+        public static Result[] ExtractDatabase()
+        {
+            Console.WriteLine("Extracting Database");
+            
+            using (var db = new ResultContext())
+            {
+                Result[] ret = new Result[db.SavedResults.Count()];
+                int i = 0;
+                foreach (var result in db.SavedResults.Include(a => a.Blob))
+                {
+                    ret[i] = result;
+                    i += 1;
+                }
+
+                return ret;
+            }
+        }
+
+        public static string DatabaseStats()
         {
             string ret = "";
-            using var db = new ResultContext();
-            foreach (var classLabel in classLabels)
+            using (var db = new ResultContext())
             {
-                int count = db.SavedResults.Count(a => a.Class == classLabel);
-                if (count > 0)
+                foreach (var classLabel in classLabels)
                 {
-                    ret += $"{classLabel}: {count}\r\n";
+                    int count = db.SavedResults.Count(a => a.Class == classLabel);
+                    if (count > 0)
+                    {
+                        ret += $"{classLabel}: {count}\r\n";
+                    }
                 }
             }
 
@@ -151,20 +197,26 @@ namespace PredictorLibrary
             {
                 if (cancel.WaitOne(0))
                 {
-                    write(new Result{ Class = "Interrupted", Blob = null, Confidence = 0.0f, Path = ""});
+                    write?.Invoke(new Result{ Class = "Interrupted", Blob = null, Confidence = 0.0f, Path = ""});
                     return;
                 }
 
-                using var image = Image.Load<Rgb24>(path);
-                var _IMemoryGroup = image.GetPixelMemoryGroup();
-                var _MemoryGroup = _IMemoryGroup.ToArray()[0];
-                byte[] blob = MemoryMarshal.AsBytes(_MemoryGroup.Span).ToArray();
+                IImageFormat format;
+                using var image = Image.Load<Rgb24>(path, out format);
+                // var _IMemoryGroup = image.GetPixelMemoryGroup();
+                // var _MemoryGroup = _IMemoryGroup.ToArray()[0];
+                // byte[] blob = MemoryMarshal.AsBytes(_MemoryGroup.Span).ToArray();
+
+                using var ms = new MemoryStream();
+                image.Save(ms, format); 
+                byte[] blob = ms.ToArray();
+
                 Result info;
 
                 if (check_if_in_db(blob, path, out info))
                 {
                     Console.WriteLine("Found identical: " + info);
-                    write(info);
+                    write?.Invoke(info);
                     return;
                 }
 
@@ -258,7 +310,7 @@ namespace PredictorLibrary
             {
                 out_mutex.WaitOne(0);
                 var result = new Result { Class = p.Label, Confidence = p.Confidence, Path = path, Blob = new ImageData { Data = blob } };
-                write(result);
+                write?.Invoke(result);
                 post_process(result);
                 out_mutex.Set();
             }

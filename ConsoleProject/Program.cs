@@ -13,7 +13,7 @@ namespace ConsoleProject
 
         static void Main(string[] args)
         {
-            var a = new Predictor(args.FirstOrDefault() ?? "./images/", Output);
+            var a = new Predictor("E:/s02170150/images/", Output);
             Console.WriteLine(a.ToString());
             Console.CancelKeyPress += (sender, eArgs) => {
                 a.Stop();

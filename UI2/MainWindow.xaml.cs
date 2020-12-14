@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
 using System.IO;
 using System.Linq;
+using System.Net.Http;
 using System.Security;
 using System.Text;
 using System.Threading;
@@ -21,6 +22,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Windows.Shapes;
 using Microsoft.EntityFrameworkCore;
+using Newtonsoft.Json;
 using PredictorLibrary;
 
 namespace UI
@@ -30,7 +32,11 @@ namespace UI
     /// </summary>
     public partial class MainWindow : Window
     {
-        private Predictor pred = null;
+        //private Predictor pred = null;
+        private HttpClient _httpClient;
+        private static CancellationTokenSource cts = new CancellationTokenSource();
+        private string url = "http://localhost:5000/server";
+        
         private ObservableCollection<ClassName> class_nums;
         private ObservableCollection<Image> images;
         private ObservableCollection<Result> results;
@@ -71,12 +77,14 @@ namespace UI
         public MainWindow()
         {
             InitializeComponent();
+            _httpClient = new HttpClient();
             threads = new Thread[Environment.ProcessorCount];
             for (int i = 0; i < Environment.ProcessorCount; ++i)
             {
                 threads[i] = null;
             }
             setBindings();
+            Extract();
         }
 
         private void setBindings()
@@ -105,6 +113,43 @@ namespace UI
             list_box_selected_imgs.SetBinding(ItemsControl.ItemsSourceProperty, filtered);
         }
 
+        private async void Extract()
+        {
+            HttpResponseMessage response;
+            try
+            {
+                response = await _httpClient.GetAsync(url + "/results");
+            }
+            catch (HttpRequestException)
+            {
+                await Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    MessageBox.Show("Connection failed.", "ERROR");
+                }));
+                return;
+            }
+            Console.WriteLine("Here");
+
+            if (response.IsSuccessStatusCode)
+            {
+                Result[] results = JsonConvert.DeserializeObject<Result[]>(response.Content.ReadAsStringAsync().Result);
+                foreach (var result in results)
+                {
+                    await Dispatcher.BeginInvoke(new Action(() => 
+                    {
+                        Image image = new Image(result.Blob.Data);
+                        image.Path = result.Path;
+                        images.Add(image);
+                    }));
+                    Output(result);
+                }
+            }
+            else
+            {
+                Console.WriteLine(response.ToString());
+            }
+        }
+        
         private void thread_method()
         {
             string path;
@@ -118,7 +163,7 @@ namespace UI
             }
         }
 
-        private void Open(object sender, ExecutedRoutedEventArgs e)
+        private async void Open(object sender, ExecutedRoutedEventArgs e)
         {
             try
             {
@@ -127,7 +172,7 @@ namespace UI
                     dialog.SelectedPath = "E:\\s02170150\\images";
                     System.Windows.Forms.DialogResult result = dialog.ShowDialog();
                     if (result != System.Windows.Forms.DialogResult.OK) return;
-                    pred?.Stop();
+                    
                     foreach (Thread t in threads)
                     {
                         t?.Join();
@@ -144,17 +189,32 @@ namespace UI
                         threads[i] = new Thread(thread_method);
                         threads[i].Start();
                     }
-                        
 
-                    if (pred == null)
+                    var content = new StringContent(JsonConvert.SerializeObject(dialog.SelectedPath), Encoding.UTF8, "application/json");
+                    HttpResponseMessage response;
+                    try
                     {
-                        pred = new Predictor(dialog.SelectedPath, Output);
+                        response = await _httpClient.PostAsync(url, content, cts.Token);
                     }
-                    else
+                    catch (HttpRequestException)
                     {
-                        pred.ImagePath = dialog.SelectedPath;
+                        await Dispatcher.BeginInvoke(new Action(() =>
+                        {
+                            MessageBox.Show("Connection failed.", "ERROR");
+                        }));
+                        return;
                     }
-                    pred.ProcessDirectory();
+
+                    if (response.IsSuccessStatusCode)
+                    {
+                        List<Result> ret =
+                            JsonConvert.DeserializeObject<List<Result>>(response.Content.ReadAsStringAsync().Result);
+
+                        foreach (var res in ret)
+                        {
+                            Output(res);
+                        }
+                    }
                 }
             }
             catch (Exception ex)
@@ -165,7 +225,9 @@ namespace UI
 
         private void Stop(object sender, RoutedEventArgs e)
         {
-            pred?.Stop();
+            cts.Cancel(false);
+            cts.Dispose();
+            cts = new CancellationTokenSource();
         }
 
         private void list_box_classes_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -182,14 +244,48 @@ namespace UI
             }
         }
 
-        private void Clear_DB(object sender, RoutedEventArgs e)
+        private async void Clear_DB(object sender, RoutedEventArgs e)
         {
-            pred?.ClearDatabase();
+            HttpResponseMessage response;
+            try
+            {
+                response = _httpClient.DeleteAsync(url).Result;
+            }
+            catch (HttpRequestException)
+            {
+                await Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    MessageBox.Show("Connection failed.", "ERROR");
+                }));
+                return;
+            }
         }
 
-        private void Stats(object sender, RoutedEventArgs e)
+        private async void Stats(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show(pred?.DatabaseStats());
+            HttpResponseMessage response;
+            try
+            {
+                response = await _httpClient.GetAsync(url + "/dbstats");
+            }
+            catch (HttpRequestException)
+            {
+                await Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    MessageBox.Show("Connection failed.", "ERROR");
+                }));
+                return;
+            }
+            
+            if (response.IsSuccessStatusCode)
+            {
+                string stats = response.Content.ReadAsStringAsync().Result;
+                
+                await Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    MessageBox.Show(stats, "Stats");
+                }));
+            }
         }
     }
 
@@ -251,6 +347,19 @@ namespace UI
             }
             Bitmap = new BitmapImage(new Uri(path));
             Class = "";
+        }
+
+        public Image(byte[] blob)
+        {
+            using (var ms = new System.IO.MemoryStream(blob))
+            {
+                var image = new BitmapImage();
+                image.BeginInit();
+                image.CacheOption = BitmapCacheOption.OnLoad; // here
+                image.StreamSource = ms;
+                image.EndInit();
+                Bitmap = image;
+            }
         }
     }
 }
