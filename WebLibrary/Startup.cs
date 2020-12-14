@@ -49,6 +49,7 @@ namespace WebLibrary
             app.UseRouting();
 
             //app.UseAuthorization();
+            app.UseCors(b => b.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod());
 
             app.UseEndpoints(endpoints =>
             {

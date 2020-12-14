@@ -4,6 +4,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging;
+using Newtonsoft.Json;
 using PredictorLibrary;
 
 namespace WebLibrary.Controllers
@@ -33,11 +34,36 @@ namespace WebLibrary.Controllers
             return res;
         }
 
+        [HttpPost("single")]
+        public Result ProcessSingleImage([FromBody] string base64string)
+        {
+            Console.WriteLine("Requested single image");
+            
+            _predictor ??= new Predictor("", null);
+            _predictor.Stop();
+            Result res = _predictor.SaveAndProcessImage(base64string);
+            if (res == null)
+            {
+                Console.WriteLine("Null");
+            }
+            else
+            {
+                Console.WriteLine($"We got {res.ToString()}");
+            }
+            return res;
+        }
+
+        [HttpPost("id")]
+        public Result[] ExtractByClass([FromBody] string classname)
+        {
+            return Predictor.ExtractByClass(classname);
+        }
+        
         [HttpGet("dbstats")]
         public string DBStats()
         {
             _predictor?.Stop();
-            return Predictor.DatabaseStats();
+            return JsonConvert.SerializeObject(Predictor.DatabaseStats());
         }
 
         [HttpDelete]
