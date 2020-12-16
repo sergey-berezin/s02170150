@@ -67,6 +67,7 @@ namespace PredictorLibrary
         private InferenceSession session;
         private AutoResetEvent out_mutex;
         private ManualResetEvent cancel;
+        private Result tmpResult;
 
         public delegate void Output(Result result);
         Output write;
@@ -170,6 +171,26 @@ namespace PredictorLibrary
             }
         }
 
+        public static Result[] ExtractByClass(string classname)
+        {
+            Console.WriteLine("Extracting " + classname);
+
+            using (var db = new ResultContext())
+            {
+                Result[] ret = new Result[db.SavedResults.Count(a => a.Class == classname)];
+                var items = from item in db.SavedResults.Include(a=>a.Blob)
+                        where item.Class == classname
+                        select item;
+                int i = 0;
+                foreach (Result res in items)
+                {
+                    ret[i] = res;
+                    i++;
+                }
+                return ret;
+            }
+        }
+
         public static string DatabaseStats()
         {
             string ret = "";
@@ -203,16 +224,13 @@ namespace PredictorLibrary
 
                 IImageFormat format;
                 using var image = Image.Load<Rgb24>(path, out format);
-                // var _IMemoryGroup = image.GetPixelMemoryGroup();
-                // var _MemoryGroup = _IMemoryGroup.ToArray()[0];
-                // byte[] blob = MemoryMarshal.AsBytes(_MemoryGroup.Span).ToArray();
 
                 using var ms = new MemoryStream();
                 image.Save(ms, format); 
                 byte[] blob = ms.ToArray();
 
                 Result info;
-
+                
                 if (check_if_in_db(blob, path, out info))
                 {
                     Console.WriteLine("Found identical: " + info);
@@ -261,8 +279,29 @@ namespace PredictorLibrary
                 db.Add(result);
                 db.SaveChanges();
             }
+
+            tmpResult = result;
         }
 
+        public Result SaveAndProcessImage(string str)
+        {
+            var bytes = Convert.FromBase64String(str);
+            string filename = "E:/s02170150/images/" + "tmp" + ".jpeg";
+            using (var imageFile = new FileStream(filename, FileMode.Create))
+            {
+                imageFile.Write(bytes ,0, bytes.Length);
+                imageFile.Flush();
+            }
+            
+            filenames ??= new ConcurrentQueue<string>();
+            filenames.Enqueue(filename);
+            out_mutex = new AutoResetEvent(true);
+            cancel = new ManualResetEvent(false);
+            thread_method();
+
+            return tmpResult;
+        }
+        
         private void process_image(Image<Rgb24> image, string path, byte[] blob)
         {
 
